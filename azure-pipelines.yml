@@ -1,0 +1,106 @@
+# HawkScan Scanning in Azure Pipelines
+# This is a demonstration of running JavaSpringVulny (a web applications) in azure-pipelines (a cicd pipeline) with the StackHawk extension (DAST testing)
+# https://marketplace.visualstudio.com/items?itemName=StackHawk.stackhawk-extensions
+# https://github.com/kaakaww/javaspringvulny
+# https://aka.ms/yaml
+
+# matrix builds for different build systems
+# use `condition: eq(variables['imageName'], 'ubuntu-latest')` property to filter tasks for specific operating systems
+
+strategy:
+  matrix:
+    windows-msi:
+      imageName: "windows-latest"
+      installerType: "msi"
+    windows-zip:
+      imageName: "windows-latest"
+      installerType: "zip"
+    linux-zip:
+      imageName: "ubuntu-latest"
+      installerType: "zip"
+    windows-auto:
+      imageName: "windows-latest"
+      installerType: "auto"
+    linux-auto:
+      imageName: "ubuntu-latest"
+      installerType: "auto"
+
+pool:
+  vmImage: $(imageName)
+
+trigger: none
+
+steps:
+  - checkout: self
+
+  - script: echo Azure Pipelines build for $(imageName)!
+    displayName: "🦅 $(imageName)"
+
+  # install the latest version of hawkscan
+  # `version` is omitted deliberately: the task defaults to "latest", so this
+  # demo always exercises the current release rather than drifting out of date.
+  #
+  # Note that from HawkScan 6.0.0 on there is a single binary per platform and no
+  # separate msi/zip artifacts, so `installerType` is accepted and then ignored —
+  # every arm of the matrix installs the same binary. The arms are kept because
+  # customers still set the input, and this proves it stays harmless.
+  - task: HawkScanInstall@2
+    inputs:
+      installerType: "$(installerType)"
+    condition: not(and(eq(variables['installerType'], 'auto'), eq(variables['imageName'], 'ubuntu-latest')))
+
+  - task: HawkScanInstall@2
+    inputs:
+      installerType: "$(installerType)"
+      installPath: '/home/vsts/custom'
+    condition: and(eq(variables['installerType'], 'auto'), eq(variables['imageName'], 'ubuntu-latest'))
+
+  # This JDK is for JavaSpringVulny, not for HawkScan — 6.x ships as a single
+  # binary with its own bundled runtime and needs no JDK on the agent.
+  - task: JavaToolInstaller@0
+    inputs:
+      versionSpec: "17"
+      jdkArchitectureOption: "x64"
+      jdkSourceOption: "PreInstalled"
+
+  # download, then start javaspringVulny in the background
+  - script: |
+      curl -Ls https://github.com/kaakaww/javaspringvulny/releases/download/0.2.0/java-spring-vuly-0.2.0.jar -o ./java-spring-vuly-0.2.0.jar
+      java -jar ./java-spring-vuly-0.2.0.jar &
+    displayName: Start JavaSpringVulny on linux
+    condition: eq(variables['imageName'], 'ubuntu-latest')
+
+  # download, then start javaspringVulny in the background
+  - powershell: |
+      Invoke-WebRequest -Uri "https://github.com/kaakaww/javaspringvulny/releases/download/0.2.0/java-spring-vuly-0.2.0.jar" -OutFile "java-spring-vuly-0.2.0.jar"
+      java --version
+      Start-Process java -ArgumentList "-jar","java-spring-vuly-0.2.0.jar","--spring.profiles.active=windows"
+    displayName: Start JavaSpringVulny on windows with gradle in the background
+    env:
+      SPRING_DATASOURCE_URL: 'jdbc:h2:file:D:\\a\\1\\db\\vulny;DB_CLOSE_ON_EXIT=FALSE;AUTO_RECONNECT=TRUE'
+    condition: eq(variables['imageName'], 'windows-latest')
+
+  # run hawkscan with the StackHawk Azure Extension
+  # `version` omitted here too, so it resolves to the same "latest" the install
+  # task used. Keep these two in step: if you ever pin one, pin both, or the run
+  # task will look for a version the install task did not put on disk.
+  - task: RunHawkScan@2
+    inputs:
+      configFile: "stackhawk.yml"
+    env:
+      HAWK_API_KEY: $(HAWK_API_KEY) # use variables in the azure devops ui to configure secrets and env vars
+      APP_ENV: $(imageName)
+      APP_ID: $(appId2)
+      SARIF_ARTIFACT: true
+    condition: not(and(eq(variables['installerType'], 'auto'), eq(variables['imageName'], 'ubuntu-latest')))
+
+  - task: RunHawkScan@2
+    inputs:
+      configFile: "stackhawk.yml"
+      installPath: '/home/vsts/custom'
+    env:
+      HAWK_API_KEY: $(HAWK_API_KEY) # use variables in the azure devops ui to configure secrets and env vars
+      APP_ENV: $(imageName)
+      APP_ID: $(appId2)
+      SARIF_ARTIFACT: true
+    condition: and(eq(variables['installerType'], 'auto'), eq(variables['imageName'], 'ubuntu-latest'))
