@@ -23,6 +23,22 @@ public class SearchService {
     @Autowired
     EntityManager entityManager;
 
+    public List<Item> search(Search search, String orderBy) {
+        final Session session = (Session) entityManager.unwrap(Session.class);
+        return session.doReturningWork(connection -> {
+            List<Item> items = new ArrayList<>();
+            String query = "select id, name, description from ITEM where description like ? order by " + orderBy;
+            PreparedStatement statement = connection.prepareStatement(query);
+            statement.setString(1, "%" + search.getSearchText() + "%");
+            ResultSet rs = statement.executeQuery();
+            while (rs.next()) {
+                items.add(new Item(rs.getLong("id"), rs.getString("name"), rs.getString("description")));
+            }
+            rs.close();
+            return items;
+        });
+    }
+
     public List<Item> search(Search search) {
         final Session session = (Session) entityManager.unwrap(Session.class);
         return session.doReturningWork(new ReturningWork<List<Item>>() {

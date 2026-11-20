@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -24,6 +25,12 @@ public class TokenItemController {
     public ResponseEntity search() {
         Search search = new Search("");
         return ResponseEntity.ok(searchService.search(search));
+    }
+
+    @GetMapping("/sorted")
+    public ResponseEntity sorted(@RequestParam(defaultValue = "") String text,
+                                 @RequestParam(defaultValue = "name") String sort) {
+        return ResponseEntity.ok(searchService.search(new Search(text), sort));
     }
 
     @GetMapping("/search/{text}")
