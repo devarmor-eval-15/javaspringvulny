@@ -12,6 +12,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -20,10 +21,15 @@ public class SearchService {
 
     private static final Logger LOGGER = Logger.getLogger(SearchService.class.getName());
 
+    private static final Set<String> SORTABLE_COLUMNS = Set.of("id", "name", "description");
+
     @Autowired
     EntityManager entityManager;
 
     public List<Item> search(Search search, String orderBy) {
+        if (!SORTABLE_COLUMNS.contains(orderBy)) {
+            throw new IllegalArgumentException("sort must be one of " + SORTABLE_COLUMNS);
+        }
         final Session session = (Session) entityManager.unwrap(Session.class);
         return session.doReturningWork(connection -> {
             List<Item> items = new ArrayList<>();
