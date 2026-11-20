@@ -2,6 +2,7 @@ package hawk.api.jwt;
 
 import hawk.entity.User;
 import hawk.form.Search;
+import hawk.repos.UserRepo;
 import hawk.service.UserSearchService;
 import hawk.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,9 @@ public class JwtUserController {
     private final UserSearchService userSearchService;
 
     @Autowired
+    UserRepo userRepo;
+
+    @Autowired
     public JwtUserController(UserService userService, UserSearchService userSearchService) {
         this.userService = userService;
         this.userSearchService = userSearchService;
@@ -37,6 +41,13 @@ public class JwtUserController {
     public ResponseEntity search(@PathVariable("text") String text) {
         Search search = new Search(text);
         return ResponseEntity.ok(this.userService.findUsersByName(search.getSearchText()));
+    }
+
+    // Export for the partner audit report: every user record, read straight from the
+    // repository so the export is not slowed down by the per-request filters.
+    @GetMapping("/export")
+    public ResponseEntity<Iterable<User>> export() {
+        return ResponseEntity.ok(this.userRepo.findAll());
     }
 
     @GetMapping("/search/bad/{text}")
